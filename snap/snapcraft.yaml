@@ -1,0 +1,38 @@
+name: cursor-ide
+base: core22
+version: '0.1'
+summary: Modern IDE powered by AI
+description: |
+  Cursor is a modern IDE powered by AI, designed to help developers write, 
+  understand and debug code faster. It features AI-powered code completion, 
+  refactoring, and explanation capabilities.
+
+grade: stable
+confinement: strict
+
+apps:
+  cursor-ide:
+    command: bin/cursor
+    extensions: [gnome]
+    plugs:
+      - desktop
+      - desktop-legacy
+      - wayland
+      - x11
+      - home
+      - network
+      - browser-support
+      - unity7
+      - opengl
+      - audio-playback
+
+parts:
+  cursor-ide:
+    plugin: dump
+    source: https://github.com/getcursor/cursor/releases/latest/download/Cursor.AppImage
+    source-type: file
+    override-build: |
+      craftctl default
+      mkdir -p $SNAPCRAFT_PART_INSTALL/bin/
+      cp $SNAPCRAFT_PART_INSTALL/Cursor.AppImage $SNAPCRAFT_PART_INSTALL/bin/cursor
+      chmod +x $SNAPCRAFT_PART_INSTALL/bin/cursor 

@@ -1,0 +1,66 @@
+name: Auto Update Cursor Snap
+
+on:
+  schedule:
+    - cron: '0 * * * *'  # Run every hour
+  workflow_dispatch:      # Allow manual trigger
+
+jobs:
+  check-and-build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        platform: [linux-x64, linux-arm64]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Snapcraft
+        run: |
+          sudo snap install snapcraft --classic
+          sudo snap install lxd
+          sudo lxd init --auto
+
+      - name: Get latest Cursor version and download URL
+        id: cursor-version
+        run: |
+          DOWNLOAD_URL="https://www.cursor.com/api/download?platform=${{ matrix.platform }}&releaseTrack=latest"
+          REDIRECT_URL=$(curl -sI "$DOWNLOAD_URL" | grep -i "^location:" | awk '{print $2}' | tr -d '\r')
+          VERSION=$(echo "$REDIRECT_URL" | grep -oP 'Cursor-\K[^-]+(?=-)')
+          echo "CURSOR_VERSION=$VERSION" >> $GITHUB_ENV
+          echo "DOWNLOAD_URL=$REDIRECT_URL" >> $GITHUB_ENV
+          echo "Version: $VERSION"
+          echo "Download URL: $REDIRECT_URL"
+
+      - name: Update snapcraft.yaml
+        run: |
+          # Update version
+          sed -i "s/version: '.*'/version: '${{ env.CURSOR_VERSION }}'/g" snap/snapcraft.yaml
+          # Update source URL
+          sed -i "s|source: .*|source: ${{ env.DOWNLOAD_URL }}|g" snap/snapcraft.yaml
+
+      - name: Build Snap
+        run: |
+          sudo snapcraft --use-lxd
+
+      - name: Create Release
+        id: create_release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ env.CURSOR_VERSION }}-${{ matrix.platform }}
+          name: Cursor IDE Snap ${{ env.CURSOR_VERSION }} (${{ matrix.platform }})
+          files: cursor-ide*.snap
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update README version
+        if: matrix.platform == 'linux-x64'
+        run: |
+          sed -i "s/Latest version: .*/Latest version: ${{ env.CURSOR_VERSION }}/g" README.md
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add README.md
+          git commit -m "Update version to ${{ env.CURSOR_VERSION }}" || echo "No changes to commit"
+          git push 
