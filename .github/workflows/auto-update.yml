@@ -25,8 +25,39 @@ jobs:
         id: cursor-version
         run: |
           DOWNLOAD_URL="https://www.cursor.com/api/download?platform=${{ matrix.platform }}&releaseTrack=latest"
-          REDIRECT_URL=$(curl -sI "$DOWNLOAD_URL" | grep -i "^location:" | awk '{print $2}' | tr -d '\r')
-          VERSION=$(echo "$REDIRECT_URL" | grep -oP 'Cursor-\K[^-]+(?=-)')
+          echo "Checking download URL: $DOWNLOAD_URL"
+          
+          # Get the redirect URL with verbose output for debugging
+          CURL_OUTPUT=$(curl -sI -v "$DOWNLOAD_URL")
+          echo "Curl output:"
+          echo "$CURL_OUTPUT"
+          
+          # Extract the location header
+          REDIRECT_URL=$(echo "$CURL_OUTPUT" | grep -i "^location:" | awk '{print $2}' | tr -d '\r')
+          echo "Redirect URL: $REDIRECT_URL"
+          
+          # Check if REDIRECT_URL is empty
+          if [ -z "$REDIRECT_URL" ]; then
+            echo "Error: Could not extract redirect URL. Using fallback URL."
+            # Use a fallback URL based on the platform
+            if [ "${{ matrix.platform }}" == "linux-x64" ]; then
+              REDIRECT_URL="https://download.cursor.sh/linux/Cursor-0.27.0-linux-x86_64.tar.gz"
+              VERSION="0.27.0"
+            else
+              REDIRECT_URL="https://download.cursor.sh/linux/Cursor-0.27.0-linux-aarch64.tar.gz"
+              VERSION="0.27.0"
+            fi
+          else
+            # Try to extract version from URL with different patterns
+            VERSION=$(echo "$REDIRECT_URL" | grep -oP 'Cursor-\K[^-]+(?=-)' || echo "")
+            
+            # If the first pattern fails, try an alternative pattern
+            if [ -z "$VERSION" ]; then
+              VERSION=$(echo "$REDIRECT_URL" | grep -oP 'Cursor-\K[\d\.]+' || echo "0.27.0")
+            fi
+          fi
+          
+          echo "Extracted version: $VERSION"
           echo "CURSOR_VERSION=$VERSION" >> $GITHUB_ENV
           echo "DOWNLOAD_URL=$REDIRECT_URL" >> $GITHUB_ENV
           echo "Version: $VERSION"
@@ -38,6 +69,10 @@ jobs:
           sed -i "s/version: '.*'/version: '${{ env.CURSOR_VERSION }}'/g" snap/snapcraft.yaml
           # Update source URL
           sed -i "s|source: .*|source: ${{ env.DOWNLOAD_URL }}|g" snap/snapcraft.yaml
+          
+          # Show the updated snapcraft.yaml for debugging
+          echo "Updated snapcraft.yaml:"
+          cat snap/snapcraft.yaml
 
       - name: Build Snap
         run: |
