@@ -121,11 +121,16 @@ jobs:
         run: |
           # Try building directly without virtualization
           sudo SNAPCRAFT_BUILD_ENVIRONMENT=host snapcraft
+          
+          # Rename the snap file to include the platform
+          if [ -f "cursor-ide_${{ env.CURSOR_VERSION }}_amd64.snap" ]; then
+            mv cursor-ide_${{ env.CURSOR_VERSION }}_amd64.snap cursor-ide_${{ env.CURSOR_VERSION }}_${{ matrix.platform }}.snap
+          fi
 
       - name: Upload Snap Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: cursor-ide-snap
+          name: cursor-ide-snap-${{ matrix.platform }}
           path: cursor-ide*.snap
           retention-days: 1
 

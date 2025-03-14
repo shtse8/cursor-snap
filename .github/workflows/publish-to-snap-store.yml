@@ -15,10 +15,19 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Download artifacts
+      - name: Download x64 artifacts
         uses: actions/download-artifact@v4
         with:
-          name: cursor-ide-snap
+          name: cursor-ide-snap-linux-x64
+          path: .
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ github.event.workflow_run.id }}
+        continue-on-error: true
+
+      - name: Download arm64 artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: cursor-ide-snap-linux-arm64
           path: .
           github-token: ${{ secrets.GITHUB_TOKEN }}
           run-id: ${{ github.event.workflow_run.id }}
