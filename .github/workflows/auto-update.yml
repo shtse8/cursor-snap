@@ -15,19 +15,9 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install Snapcraft and setup LXD
+      - name: Install Snapcraft
         run: |
           sudo snap install snapcraft --classic
-          sudo snap install lxd
-          sudo lxd init --auto
-          
-          # Fix LXD network issues in GitHub Actions
-          sudo ip link set dev lxdbr0 up
-          sudo iptables -P FORWARD ACCEPT
-          
-          # Configure LXD profile for better network connectivity
-          lxc profile device add default eth0 nic nictype=bridged parent=lxdbr0
-          lxc profile show default
 
       - name: Get latest Cursor version and download URL
         id: cursor-version
@@ -89,10 +79,10 @@ jobs:
           chmod +x cursor.appimage
           ls -la cursor.appimage
 
-      - name: Build Snap
+      - name: Build Snap (Direct Method)
         run: |
-          # Try with --debug flag to get more information
-          sudo snapcraft --use-lxd --debug
+          # Try building directly without virtualization
+          sudo SNAPCRAFT_BUILD_ENVIRONMENT=host snapcraft
 
       - name: Upload Snap Artifact
         uses: actions/upload-artifact@v4
