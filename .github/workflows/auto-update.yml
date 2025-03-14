@@ -148,9 +148,18 @@ jobs:
       - name: Update README version
         if: matrix.platform == 'linux-x64'
         run: |
+          # Update README with latest version
           sed -i "s/Latest version: .*/Latest version: ${{ env.CURSOR_VERSION }}/g" README.md
+          
+          # Configure git
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
-          git add README.md
-          git commit -m "Update version to ${{ env.CURSOR_VERSION }}" || echo "No changes to commit"
-          git push 
+          
+          # Add both README and snapcraft.yaml to the commit
+          git add README.md snap/snapcraft.yaml
+          
+          # Commit the changes
+          git commit -m "Update version to ${{ env.CURSOR_VERSION }} and update snapcraft.yaml" || echo "No changes to commit"
+          
+          # Push the changes
+          git push || (git pull --rebase && git push) 
