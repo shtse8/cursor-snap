@@ -65,19 +65,53 @@ jobs:
         run: |
           # Update version
           sed -i "s/version: '.*'/version: '${{ env.CURSOR_VERSION }}'/g" snap/snapcraft.yaml
-          # Update source URL
-          sed -i "s|source: .*|source: ${{ env.DOWNLOAD_URL }}|g" snap/snapcraft.yaml
+          
+          # Update the override-build section to use the downloaded AppImage
+          cat > snap/snapcraft.yaml << EOF
+          name: cursor-ide
+          base: core22
+          version: '${{ env.CURSOR_VERSION }}'
+          summary: Modern IDE powered by AI
+          description: |
+            Cursor is a modern IDE powered by AI, designed to help developers write, 
+            understand and debug code faster. It features AI-powered code completion, 
+            refactoring, and explanation capabilities.
+
+          grade: stable
+          confinement: strict
+
+          apps:
+            cursor-ide:
+              command: bin/cursor
+              extensions: [gnome]
+              plugs:
+                - desktop
+                - desktop-legacy
+                - wayland
+                - x11
+                - home
+                - network
+                - browser-support
+                - unity7
+                - opengl
+                - audio-playback
+
+          parts:
+            cursor-ide:
+              plugin: dump
+              source: ${{ env.DOWNLOAD_URL }}
+              source-type: file
+              override-build: |
+                craftctl default
+                mkdir -p \$SNAPCRAFT_PART_INSTALL/bin/
+                # Copy the downloaded AppImage with the correct name
+                cp \$SNAPCRAFT_PART_SRC/* \$SNAPCRAFT_PART_INSTALL/bin/cursor
+                chmod +x \$SNAPCRAFT_PART_INSTALL/bin/cursor
+          EOF
           
           # Show the updated snapcraft.yaml for debugging
           echo "Updated snapcraft.yaml:"
           cat snap/snapcraft.yaml
-
-      - name: Download AppImage
-        run: |
-          echo "Downloading AppImage from ${{ env.DOWNLOAD_URL }}"
-          curl -L -o cursor.appimage "${{ env.DOWNLOAD_URL }}"
-          chmod +x cursor.appimage
-          ls -la cursor.appimage
 
       - name: Build Snap (Direct Method)
         run: |
