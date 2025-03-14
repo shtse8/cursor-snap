@@ -27,25 +27,25 @@ jobs:
           DOWNLOAD_URL="https://www.cursor.com/api/download?platform=${{ matrix.platform }}&releaseTrack=latest"
           echo "Checking download URL: $DOWNLOAD_URL"
           
-          # Get the redirect URL with verbose output for debugging
-          CURL_OUTPUT=$(curl -sI -v "$DOWNLOAD_URL")
-          echo "Curl output:"
-          echo "$CURL_OUTPUT"
+          # Get the JSON response from the API
+          API_RESPONSE=$(curl -s "$DOWNLOAD_URL")
+          echo "API response:"
+          echo "$API_RESPONSE"
           
-          # Extract the location header
-          REDIRECT_URL=$(echo "$CURL_OUTPUT" | grep -i "^location:" | awk '{print $2}' | tr -d '\r')
-          echo "Redirect URL: $REDIRECT_URL"
+          # Extract the downloadUrl from the JSON response
+          REDIRECT_URL=$(echo "$API_RESPONSE" | grep -o '"downloadUrl":"[^"]*"' | sed 's/"downloadUrl":"//;s/"//')
+          echo "Download URL from JSON: $REDIRECT_URL"
           
           # Check if REDIRECT_URL is empty
           if [ -z "$REDIRECT_URL" ]; then
-            echo "Error: Could not extract redirect URL. Using fallback URL."
+            echo "Error: Could not extract download URL from JSON. Using fallback URL."
             # Use a fallback URL based on the platform
             if [ "${{ matrix.platform }}" == "linux-x64" ]; then
-              REDIRECT_URL="https://download.cursor.sh/linux/Cursor-0.27.0-linux-x86_64.tar.gz"
-              VERSION="0.27.0"
+              REDIRECT_URL="https://downloads.cursor.com/production/client/linux/x64/appimage/Cursor-0.47.4-8f8a2000673d2c48f6cac5eea2f3f9f2ed5e4ec2.deb.glibc2.28-x86_64.AppImage"
+              VERSION="0.47.4"
             else
-              REDIRECT_URL="https://download.cursor.sh/linux/Cursor-0.27.0-linux-aarch64.tar.gz"
-              VERSION="0.27.0"
+              REDIRECT_URL="https://downloads.cursor.com/production/client/linux/arm64/appimage/Cursor-0.47.4-8f8a2000673d2c48f6cac5eea2f3f9f2ed5e4ec2.deb.glibc2.28-aarch64.AppImage"
+              VERSION="0.47.4"
             fi
           else
             # Try to extract version from URL with different patterns
@@ -53,7 +53,7 @@ jobs:
             
             # If the first pattern fails, try an alternative pattern
             if [ -z "$VERSION" ]; then
-              VERSION=$(echo "$REDIRECT_URL" | grep -oP 'Cursor-\K[\d\.]+' || echo "0.27.0")
+              VERSION=$(echo "$REDIRECT_URL" | grep -oP 'Cursor-\K[\d\.]+' || echo "0.47.4")
             fi
           fi
           
