@@ -323,31 +323,51 @@ jobs:
             exit 1
           fi
           
+          # Create a temporary directory with restricted permissions
+          TEMP_DIR=$(mktemp -d)
+          chmod 700 "$TEMP_DIR"
+          
           # Write credentials to a file without echoing to logs
           echo "Decoding Snap Store credentials..."
-          printf "%s" "${{ secrets.SNAPCRAFT_LOGIN_FILE }}" | base64 -d > snapcraft.login || {
-            echo "Error: Failed to decode base64 credentials. Make sure the SNAPCRAFT_LOGIN_FILE is valid base64."
-            exit 1
-          }
+          # Use a subshell to avoid exposing credentials in process list
+          (
+            cd "$TEMP_DIR"
+            printf "%s" "${{ secrets.SNAPCRAFT_LOGIN_FILE }}" | base64 -d > snapcraft.login 2>/dev/null
+            if [ $? -ne 0 ]; then
+              echo "Error: Failed to decode base64 credentials"
+              exit 1
+            fi
+            
+            # Check if the file is empty
+            if [ ! -s "snapcraft.login" ]; then
+              echo "Error: Decoded credentials file is empty"
+              exit 1
+            fi
+            
+            # Export credentials as environment variable
+            export SNAPCRAFT_STORE_CREDENTIALS=$(cat snapcraft.login)
+            
+            # Set for the rest of the job
+            echo "SNAPCRAFT_STORE_CREDENTIALS<<EOF" >> $GITHUB_ENV
+            cat snapcraft.login >> $GITHUB_ENV
+            echo "EOF" >> $GITHUB_ENV
+            
+            # Clean up immediately
+            rm -f snapcraft.login
+          )
           
-          # Check if the file is empty
-          if [ ! -s "snapcraft.login" ]; then
-            echo "Error: Decoded credentials file is empty"
+          # Clean up temp directory
+          rm -rf "$TEMP_DIR"
+          
+          # Verify authentication works
+          echo "Authenticating with Snap Store..."
+          if ! snapcraft whoami > /dev/null 2>&1; then
+            echo "Error: Failed to authenticate with Snap Store. Credentials may be invalid or expired."
             exit 1
           fi
           
-          # Login using the credentials file
-          echo "Authenticating with Snap Store..."
-          snapcraft login --with snapcraft.login || {
-            echo "Error: Failed to authenticate with Snap Store. Credentials may be invalid or expired."
-            exit 1
-          }
-          
           echo "Successfully authenticated with Snap Store"
           snapcraft whoami | grep -v "^email:" # Show account info without revealing email
-          
-          # Clean up
-          rm -f snapcraft.login
 
       - name: Publish to Snap Store
         if: env.SNAP_FILES_EXIST == 'true'
