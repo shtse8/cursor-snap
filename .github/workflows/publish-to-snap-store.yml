@@ -6,6 +6,15 @@ on:
     types:
       - completed
   workflow_dispatch:  # Allow manual trigger
+    inputs:
+      force_publish:
+        description: 'Force publish to Snap Store regardless of artifact availability'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
 
 jobs:
   publish-to-snap-store:
@@ -15,62 +24,109 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Get workflow run ID
+        id: workflow_run
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_run" ]; then
+            echo "run_id=${{ github.event.workflow_run.id }}" >> $GITHUB_OUTPUT
+            echo "Using workflow run ID: ${{ github.event.workflow_run.id }}"
+          else
+            # Get the latest successful run of the Auto Update workflow
+            LATEST_RUN=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              "https://api.github.com/repos/${{ github.repository }}/actions/workflows/auto-update.yml/runs?status=success&per_page=1")
+            
+            RUN_ID=$(echo "$LATEST_RUN" | grep -o '"id":[0-9]*' | head -1 | sed 's/"id"://')
+            
+            if [ -z "$RUN_ID" ]; then
+              echo "No successful workflow run found. Will try to download from releases."
+              echo "run_id=0" >> $GITHUB_OUTPUT
+            else
+              echo "run_id=$RUN_ID" >> $GITHUB_OUTPUT
+              echo "Using latest successful workflow run ID: $RUN_ID"
+            fi
+          fi
+
+      - name: List available artifacts
+        if: steps.workflow_run.outputs.run_id != '0'
+        run: |
+          echo "Listing available artifacts for run ID: ${{ steps.workflow_run.outputs.run_id }}"
+          curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/runs/${{ steps.workflow_run.outputs.run_id }}/artifacts" | \
+            grep -o '"name":"[^"]*"' | sed 's/"name":"//;s/"//'
+
       - name: Download x64 artifacts
+        if: steps.workflow_run.outputs.run_id != '0'
         uses: actions/download-artifact@v4
         with:
           name: cursor-ide-snap-linux-x64
           path: .
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          run-id: ${{ github.event.workflow_run.id }}
+          run-id: ${{ steps.workflow_run.outputs.run_id }}
         continue-on-error: true
 
       - name: Download arm64 artifacts
+        if: steps.workflow_run.outputs.run_id != '0'
         uses: actions/download-artifact@v4
         with:
           name: cursor-ide-snap-linux-arm64
           path: .
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          run-id: ${{ github.event.workflow_run.id }}
+          run-id: ${{ steps.workflow_run.outputs.run_id }}
         continue-on-error: true
 
-      - name: Check for snap files
-        id: check_snap
+      - name: Check for snap files from artifacts
+        id: check_artifacts
         run: |
           if ls cursor-ide*.snap 1> /dev/null 2>&1; then
             echo "SNAP_FILES_EXIST=true" >> $GITHUB_ENV
-            echo "Snap files found:"
+            echo "Snap files found from artifacts:"
             ls -la cursor-ide*.snap
           else
             echo "SNAP_FILES_EXIST=false" >> $GITHUB_ENV
-            echo "No snap files found in artifacts. If running manually, you may need to build the snap first."
+            echo "No snap files found from artifacts."
+          fi
+
+      - name: Download from GitHub releases
+        if: env.SNAP_FILES_EXIST == 'false' || github.event.inputs.force_publish == 'true'
+        run: |
+          echo "Attempting to download from latest GitHub release..."
+          
+          # Get latest release info
+          LATEST_RELEASE=$(curl -s https://api.github.com/repos/${{ github.repository }}/releases/latest)
+          
+          # Download assets if available
+          if echo "$LATEST_RELEASE" | grep -q "assets"; then
+            # Extract download URLs for snap files
+            ASSET_URLS=$(echo "$LATEST_RELEASE" | grep -o '"browser_download_url": "[^"]*\.snap"' | sed 's/"browser_download_url": "//;s/"//')
             
-            # If running manually, try to download from the latest release
-            if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
-              echo "Attempting to download from latest GitHub release..."
+            if [ ! -z "$ASSET_URLS" ]; then
+              echo "Found snap files in latest release, downloading..."
+              for URL in $ASSET_URLS; do
+                echo "Downloading $URL"
+                curl -L -O "$URL"
+              done
               
-              # Get latest release info
-              LATEST_RELEASE=$(curl -s https://api.github.com/repos/${{ github.repository }}/releases/latest)
-              
-              # Download assets if available
-              if echo "$LATEST_RELEASE" | grep -q "assets"; then
-                # Extract download URLs for snap files
-                ASSET_URLS=$(echo "$LATEST_RELEASE" | grep -o '"browser_download_url": "[^"]*\.snap"' | sed 's/"browser_download_url": "//;s/"//')
-                
-                if [ ! -z "$ASSET_URLS" ]; then
-                  echo "Found snap files in latest release, downloading..."
-                  for URL in $ASSET_URLS; do
-                    echo "Downloading $URL"
-                    curl -L -O "$URL"
-                  done
-                  
-                  if ls cursor-ide*.snap 1> /dev/null 2>&1; then
-                    echo "SNAP_FILES_EXIST=true" >> $GITHUB_ENV
-                    echo "Downloaded snap files from latest release:"
-                    ls -la cursor-ide*.snap
-                  fi
-                fi
+              if ls cursor-ide*.snap 1> /dev/null 2>&1; then
+                echo "SNAP_FILES_EXIST=true" >> $GITHUB_ENV
+                echo "Downloaded snap files from latest release:"
+                ls -la cursor-ide*.snap
               fi
+            else
+              echo "No snap files found in latest release assets."
             fi
+          else
+            echo "No assets found in latest release."
+          fi
+
+      - name: Final check for snap files
+        run: |
+          if ls cursor-ide*.snap 1> /dev/null 2>&1; then
+            echo "SNAP_FILES_EXIST=true" >> $GITHUB_ENV
+            echo "Snap files available for publishing:"
+            ls -la cursor-ide*.snap
+          else
+            echo "SNAP_FILES_EXIST=false" >> $GITHUB_ENV
+            echo "No snap files found after all attempts. Cannot publish to Snap Store."
           fi
 
       - name: Install Snapcraft
@@ -103,5 +159,6 @@ jobs:
             if [ -f "$snap_file" ]; then
               echo "Publishing $snap_file to Snap Store..."
               snapcraft upload --release=stable "$snap_file"
+              echo "Published $snap_file successfully!"
             fi
           done 

@@ -237,7 +237,7 @@ jobs:
         with:
           name: cursor-ide-snap-${{ matrix.platform }}
           path: cursor-ide*.snap
-          retention-days: 1
+          retention-days: 7  # Increase retention to ensure artifacts are available
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
