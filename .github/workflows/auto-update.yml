@@ -4,6 +4,15 @@ on:
   schedule:
     - cron: '0 * * * *'  # Run every hour
   workflow_dispatch:      # Allow manual trigger
+    inputs:
+      force_rebuild:
+        description: 'Force rebuild and publish regardless of version checks'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
 
 jobs:
   check-version:
@@ -80,21 +89,60 @@ jobs:
           echo "ARM64 Version: $VERSION"
           echo "ARM64 URL: $REDIRECT_URL"
 
+      - name: Install Snapcraft to check Snap Store version
+        run: |
+          sudo snap install snapcraft --classic
+
+      - name: Check Snap Store version
+        id: snap_store_version
+        run: |
+          # Query the Snap Store for the current version of cursor-ide
+          SNAP_INFO=$(curl -s "https://api.snapcraft.io/v2/snaps/info/cursor-ide" -H "Snap-Device-Series: 16")
+          
+          if echo "$SNAP_INFO" | grep -q "not found"; then
+            echo "Snap package not found in the Snap Store"
+            SNAP_VERSION="0.0.0"
+          else
+            # Try to extract the version from the Snap Store response
+            SNAP_VERSION=$(echo "$SNAP_INFO" | grep -o '"version":"[^"]*"' | head -1 | sed 's/"version":"//;s/"//')
+            
+            # If version extraction failed, set a default
+            if [ -z "$SNAP_VERSION" ]; then
+              SNAP_VERSION="0.0.0"
+            fi
+          fi
+          
+          echo "snap_version=$SNAP_VERSION" >> $GITHUB_OUTPUT
+          echo "Snap Store Version: $SNAP_VERSION"
+
       - name: Check if update is needed
         id: check_update
         run: |
           # Get current version from README
           CURRENT_VERSION=$(grep -oP 'Latest version: \K.*' README.md || echo "0.0.0")
-          echo "Current version: $CURRENT_VERSION"
-          echo "New version: ${{ steps.x64_version.outputs.version }}"
+          SNAP_VERSION="${{ steps.snap_store_version.outputs.snap_version }}"
+          NEW_VERSION="${{ steps.x64_version.outputs.version }}"
           
-          # Compare versions
-          if [ "$CURRENT_VERSION" != "${{ steps.x64_version.outputs.version }}" ]; then
+          echo "Current README version: $CURRENT_VERSION"
+          echo "Current Snap Store version: $SNAP_VERSION"
+          echo "New Cursor IDE version: $NEW_VERSION"
+          
+          # Check if force_rebuild is enabled
+          FORCE_REBUILD="${{ github.event.inputs.force_rebuild }}"
+          if [ "$FORCE_REBUILD" == "true" ]; then
+            echo "Force rebuild enabled, will update regardless of version checks"
             echo "should_update=true" >> $GITHUB_OUTPUT
-            echo "Update needed: Current=$CURRENT_VERSION, New=${{ steps.x64_version.outputs.version }}"
+            echo "Update forced via manual trigger"
+            exit 0
+          fi
+          
+          # Compare versions - update if either README or Snap Store version is different
+          if [ "$CURRENT_VERSION" != "$NEW_VERSION" ] || [ "$SNAP_VERSION" != "$NEW_VERSION" ]; then
+            echo "should_update=true" >> $GITHUB_OUTPUT
+            echo "Update needed: README=$CURRENT_VERSION, Snap Store=$SNAP_VERSION, New=$NEW_VERSION"
           else
             echo "should_update=false" >> $GITHUB_OUTPUT
-            echo "No update needed: Current version is already $CURRENT_VERSION"
+            echo "No update needed: Both README and Snap Store versions are already $NEW_VERSION"
           fi
 
   build-and-release:

@@ -43,6 +43,34 @@ jobs:
           else
             echo "SNAP_FILES_EXIST=false" >> $GITHUB_ENV
             echo "No snap files found in artifacts. If running manually, you may need to build the snap first."
+            
+            # If running manually, try to download from the latest release
+            if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+              echo "Attempting to download from latest GitHub release..."
+              
+              # Get latest release info
+              LATEST_RELEASE=$(curl -s https://api.github.com/repos/${{ github.repository }}/releases/latest)
+              
+              # Download assets if available
+              if echo "$LATEST_RELEASE" | grep -q "assets"; then
+                # Extract download URLs for snap files
+                ASSET_URLS=$(echo "$LATEST_RELEASE" | grep -o '"browser_download_url": "[^"]*\.snap"' | sed 's/"browser_download_url": "//;s/"//')
+                
+                if [ ! -z "$ASSET_URLS" ]; then
+                  echo "Found snap files in latest release, downloading..."
+                  for URL in $ASSET_URLS; do
+                    echo "Downloading $URL"
+                    curl -L -O "$URL"
+                  done
+                  
+                  if ls cursor-ide*.snap 1> /dev/null 2>&1; then
+                    echo "SNAP_FILES_EXIST=true" >> $GITHUB_ENV
+                    echo "Downloaded snap files from latest release:"
+                    ls -la cursor-ide*.snap
+                  fi
+                fi
+              fi
+            fi
           fi
 
       - name: Install Snapcraft

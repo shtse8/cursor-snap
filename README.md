@@ -17,6 +17,15 @@ The update process is fully automated and works as follows:
 4. Update this README with the latest version
 5. Publish the snap packages to the Snap Store
 
+You can also manually trigger a rebuild and publish by:
+1. Going to the Actions tab in this repository
+2. Selecting the "Auto Update Cursor Snap" workflow
+3. Clicking "Run workflow"
+4. Setting "Force rebuild regardless of version checks" to "true"
+5. Clicking "Run workflow"
+
+This is useful if the Snap Store publication failed but the README was updated, or if you want to force a rebuild for any other reason.
+
 ### Supported Platforms
 - linux-x64 (64-bit x86)
 - linux-arm64 (64-bit ARM)
@@ -121,12 +130,15 @@ To set up Snap Store publishing:
 The GitHub Actions workflows in this repository are designed to be simple, reliable, and efficient:
 
 1. **Check Version Job**: Checks if there's a new version of Cursor IDE available
+   - Compares against both the README version and the Snap Store version
+   - Ensures updates are triggered if either is out of date
 2. **Build and Release Job**: Builds snap packages for both platforms and creates GitHub releases
 3. **Update README Job**: Updates this README with the latest version information
 4. **Publish to Snap Store Workflow**: Publishes the snap packages to the Snap Store
 
 This architecture ensures that:
 - We only build when there's a new version available
+- The Snap Store always has the latest version, even if the README is already updated
 - Each step is clearly separated and has a single responsibility
 - The process is reliable and avoids race conditions
 
