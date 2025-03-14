@@ -129,70 +129,16 @@ jobs:
           path: cursor-ide*.snap
           retention-days: 1
 
-      - name: Create GitHub Release
-        uses: actions/github-script@v7
+      - name: Create GitHub Release (Simple Method)
+        uses: softprops/action-gh-release@v2
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const fs = require('fs');
-            const path = require('path');
-            
-            const tagName = `${{ env.CURSOR_VERSION }}-${{ matrix.platform }}`;
-            const releaseName = `Cursor IDE Snap ${{ env.CURSOR_VERSION }} (${{ matrix.platform }})`;
-            
-            try {
-              // Check if release already exists
-              const releases = await github.rest.repos.listReleases({
-                owner: context.repo.owner,
-                repo: context.repo.repo
-              });
-              
-              const existingRelease = releases.data.find(release => release.tag_name === tagName);
-              
-              let releaseId;
-              if (existingRelease) {
-                console.log(`Release with tag ${tagName} already exists. Using existing release.`);
-                releaseId = existingRelease.id;
-              } else {
-                // Create a new release
-                console.log(`Creating new release with tag ${tagName}`);
-                const release = await github.rest.repos.createRelease({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  tag_name: tagName,
-                  name: releaseName,
-                  draft: false,
-                  prerelease: false
-                });
-                releaseId = release.data.id;
-              }
-              
-              // Find the snap file
-              const snapFiles = fs.readdirSync('.').filter(file => file.endsWith('.snap'));
-              if (snapFiles.length === 0) {
-                throw new Error('No snap files found');
-              }
-              
-              // Upload the snap file to the release
-              for (const snapFile of snapFiles) {
-                console.log(`Uploading ${snapFile} to release ${releaseId}`);
-                const filePath = path.resolve(snapFile);
-                const fileStats = fs.statSync(filePath);
-                
-                await github.rest.repos.uploadReleaseAsset({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  release_id: releaseId,
-                  name: snapFile,
-                  data: fs.readFileSync(filePath)
-                });
-                
-                console.log(`Successfully uploaded ${snapFile}`);
-              }
-            } catch (error) {
-              console.error('Error creating release or uploading assets:', error);
-              core.setFailed(error.message);
-            }
+          token: ${{ secrets.GITHUB_TOKEN }}
+          tag_name: ${{ env.CURSOR_VERSION }}-${{ matrix.platform }}
+          name: Cursor IDE Snap ${{ env.CURSOR_VERSION }} (${{ matrix.platform }})
+          files: cursor-ide*.snap
+          draft: false
+          fail_on_unmatched_files: false
+          prerelease: false
 
       - name: Update README version
         if: matrix.platform == 'linux-x64'
