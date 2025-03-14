@@ -48,6 +48,8 @@ Or install from the Snap Store:
 sudo snap install cursor-ide
 ```
 
+The snap is available in the Snap Store at: https://snapcraft.io/cursor-ide
+
 ## Features
 
 - AI-powered code completion
@@ -80,10 +82,32 @@ This repository is configured to automatically publish new versions to the Snap 
 
 To set up Snap Store publishing:
 
-1. Run the `Generate Snap Store Login` workflow from the Actions tab
-2. Enter your Snap Store username and password
-3. Copy the encoded login file value from the workflow output
-4. Add it as a repository secret named `SNAPCRAFT_LOGIN_FILE`
+1. Install snapcraft on a Linux machine (not in GitHub Actions for security):
+   ```bash
+   sudo snap install snapcraft --classic
+   ```
+
+2. Generate a Snap Store login file:
+   ```bash
+   snapcraft export-login --snaps cursor-ide --channels=stable snapcraft.login
+   ```
+
+3. Encode the login file to base64:
+   ```bash
+   cat snapcraft.login | base64 -w 0
+   ```
+
+4. Copy the encoded output
+
+5. Add it as a repository secret:
+   - Go to your repository settings
+   - Click on "Secrets and variables" -> "Actions"
+   - Click "New repository secret"
+   - Name: `SNAPCRAFT_LOGIN_FILE`
+   - Value: Paste the encoded login file value
+   - Click "Add secret"
+
+> **Security Note**: Never generate Snap Store credentials directly in GitHub Actions as the credentials could be exposed in logs.
 
 ## License
 
