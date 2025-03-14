@@ -317,19 +317,37 @@ jobs:
         if: env.SNAP_FILES_EXIST == 'true'
         id: snapcraft_login
         run: |
-          # Write credentials to a file without echoing to logs
-          printf "%s" "${{ secrets.SNAPCRAFT_LOGIN_FILE }}" | base64 -d > snapcraft.login
-          # Export credentials as an output for later steps
-          echo "SNAPCRAFT_STORE_CREDENTIALS=$(cat snapcraft.login)" >> $GITHUB_ENV
-          # Securely remove the credentials file
-          rm snapcraft.login
-          # Verify credentials are set (without printing them)
-          if [ -n "$SNAPCRAFT_STORE_CREDENTIALS" ]; then
-            echo "Snapcraft credentials loaded successfully"
-          else
-            echo "Failed to load Snapcraft credentials"
+          # Check if the secret is set
+          if [ -z "${{ secrets.SNAPCRAFT_LOGIN_FILE }}" ]; then
+            echo "Error: SNAPCRAFT_LOGIN_FILE secret is not set in the repository"
             exit 1
           fi
+          
+          # Write credentials to a file without echoing to logs
+          echo "Decoding Snap Store credentials..."
+          printf "%s" "${{ secrets.SNAPCRAFT_LOGIN_FILE }}" | base64 -d > snapcraft.login || {
+            echo "Error: Failed to decode base64 credentials. Make sure the SNAPCRAFT_LOGIN_FILE is valid base64."
+            exit 1
+          }
+          
+          # Check if the file is empty
+          if [ ! -s "snapcraft.login" ]; then
+            echo "Error: Decoded credentials file is empty"
+            exit 1
+          fi
+          
+          # Login using the credentials file
+          echo "Authenticating with Snap Store..."
+          snapcraft login --with snapcraft.login || {
+            echo "Error: Failed to authenticate with Snap Store. Credentials may be invalid or expired."
+            exit 1
+          }
+          
+          echo "Successfully authenticated with Snap Store"
+          snapcraft whoami | grep -v "^email:" # Show account info without revealing email
+          
+          # Clean up
+          rm -f snapcraft.login
 
       - name: Publish to Snap Store
         if: env.SNAP_FILES_EXIST == 'true'
@@ -337,7 +355,10 @@ jobs:
           for snap_file in cursor-ide*.snap; do
             if [ -f "$snap_file" ]; then
               echo "Publishing $snap_file to Snap Store..."
-              snapcraft upload --release=stable "$snap_file"
+              snapcraft upload --release=stable "$snap_file" || {
+                echo "Error: Failed to publish $snap_file to Snap Store"
+                exit 1
+              }
               echo "Published $snap_file successfully!"
             fi
           done 
