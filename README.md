@@ -10,6 +10,13 @@ Latest version: 0.47.4
 
 This repository automatically checks for new Cursor IDE releases every hour and builds a new snap package when updates are available. You can find the latest builds in the [Releases](https://github.com/shtse8/cursor-snap/releases) section.
 
+The update process is fully automated and works as follows:
+1. Check for new versions of Cursor IDE
+2. If a new version is found, build snap packages for both x64 and arm64 platforms
+3. Create GitHub releases with the snap packages
+4. Update this README with the latest version
+5. Publish the snap packages to the Snap Store
+
 ### Supported Platforms
 - linux-x64 (64-bit x86)
 - linux-arm64 (64-bit ARM)
@@ -108,6 +115,20 @@ To set up Snap Store publishing:
    - Click "Add secret"
 
 > **Security Note**: Never generate Snap Store credentials directly in GitHub Actions as the credentials could be exposed in logs.
+
+## Workflow Architecture
+
+The GitHub Actions workflows in this repository are designed to be simple, reliable, and efficient:
+
+1. **Check Version Job**: Checks if there's a new version of Cursor IDE available
+2. **Build and Release Job**: Builds snap packages for both platforms and creates GitHub releases
+3. **Update README Job**: Updates this README with the latest version information
+4. **Publish to Snap Store Workflow**: Publishes the snap packages to the Snap Store
+
+This architecture ensures that:
+- We only build when there's a new version available
+- Each step is clearly separated and has a single responsibility
+- The process is reliable and avoids race conditions
 
 ## License
 
