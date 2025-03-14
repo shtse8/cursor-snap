@@ -1,0 +1,56 @@
+name: Generate Snap Store Login
+
+on:
+  workflow_dispatch:
+    inputs:
+      snap_store_username:
+        description: 'Snap Store Username'
+        required: true
+      snap_store_password:
+        description: 'Snap Store Password'
+        required: true
+
+jobs:
+  generate-login:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install Snapcraft
+        run: sudo snap install snapcraft --classic
+
+      - name: Generate Snap Store Login
+        id: generate_login
+        run: |
+          # Create a temporary file for storing credentials
+          echo "${{ github.event.inputs.snap_store_username }}" > credentials
+          echo "${{ github.event.inputs.snap_store_password }}" >> credentials
+          
+          # Export login using the credentials
+          cat credentials | snapcraft login --with - > snapcraft.login
+          
+          # Remove the credentials file
+          rm credentials
+          
+          # Display the login file (this will be visible in the workflow logs)
+          echo "Generated Snap Store login file:"
+          cat snapcraft.login
+          
+          # Encode the login file to base64 for easy copying
+          ENCODED_LOGIN=$(base64 -w 0 snapcraft.login)
+          echo "::set-output name=encoded_login::$ENCODED_LOGIN"
+          echo "Encoded login file (copy this value):"
+          echo "$ENCODED_LOGIN"
+
+      - name: Instructions
+        run: |
+          echo "===================================================================="
+          echo "IMPORTANT: Copy the encoded login file value from the previous step"
+          echo "and add it as a repository secret named SNAPCRAFT_LOGIN_FILE"
+          echo "===================================================================="
+          echo ""
+          echo "To add the secret:"
+          echo "1. Go to your repository settings"
+          echo "2. Click on 'Secrets and variables' -> 'Actions'"
+          echo "3. Click 'New repository secret'"
+          echo "4. Name: SNAPCRAFT_LOGIN_FILE"
+          echo "5. Value: Paste the encoded login file value"
+          echo "6. Click 'Add secret'" 

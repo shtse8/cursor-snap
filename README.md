@@ -42,7 +42,7 @@ Once built, you can install the snap locally with:
 sudo snap install cursor-ide_*.snap --dangerous
 ```
 
-Or install from the Snap Store (once published):
+Or install from the Snap Store:
 
 ```bash
 sudo snap install cursor-ide
@@ -70,6 +70,20 @@ The snap package requires the following permissions:
 
 For issues related to the snap package, please file them in this repository's issue tracker.
 For Cursor IDE specific issues, please visit [Cursor's official repository](https://github.com/getcursor/cursor).
+
+## Publishing to Snap Store
+
+This repository is configured to automatically publish new versions to the Snap Store. The process works as follows:
+
+1. The `Auto Update Cursor Snap` workflow checks for new Cursor IDE versions and builds the snap package
+2. The `Publish to Snap Store` workflow then publishes the built snap to the Snap Store
+
+To set up Snap Store publishing:
+
+1. Run the `Generate Snap Store Login` workflow from the Actions tab
+2. Enter your Snap Store username and password
+3. Copy the encoded login file value from the workflow output
+4. Add it as a repository secret named `SNAPCRAFT_LOGIN_FILE`
 
 ## License
 

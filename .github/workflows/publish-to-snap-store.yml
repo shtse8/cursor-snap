@@ -1,0 +1,58 @@
+name: Publish to Snap Store
+
+on:
+  workflow_run:
+    workflows: ["Auto Update Cursor Snap"]
+    types:
+      - completed
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  publish-to-snap-store:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download artifacts
+        uses: dawidd6/action-download-artifact@v2
+        with:
+          workflow: auto-update.yml
+          workflow_conclusion: success
+          name: cursor-ide-snap
+          path: .
+        continue-on-error: true
+
+      - name: Check for snap files
+        id: check_snap
+        run: |
+          if ls cursor-ide*.snap 1> /dev/null 2>&1; then
+            echo "SNAP_FILES_EXIST=true" >> $GITHUB_ENV
+            echo "Snap files found:"
+            ls -la cursor-ide*.snap
+          else
+            echo "SNAP_FILES_EXIST=false" >> $GITHUB_ENV
+            echo "No snap files found in artifacts. If running manually, you may need to build the snap first."
+          fi
+
+      - name: Install Snapcraft
+        if: env.SNAP_FILES_EXIST == 'true'
+        run: sudo snap install snapcraft --classic
+
+      - name: Login to Snap Store
+        if: env.SNAP_FILES_EXIST == 'true'
+        run: |
+          echo "${{ secrets.SNAPCRAFT_LOGIN_FILE }}" | base64 -d > snapcraft.login
+          snapcraft login --with snapcraft.login
+          rm snapcraft.login
+
+      - name: Publish to Snap Store
+        if: env.SNAP_FILES_EXIST == 'true'
+        run: |
+          for snap_file in cursor-ide*.snap; do
+            if [ -f "$snap_file" ]; then
+              echo "Publishing $snap_file to Snap Store..."
+              snapcraft upload --release=stable "$snap_file"
+            fi
+          done 
