@@ -79,15 +79,22 @@ jobs:
 
       - name: Login to Snap Store
         if: env.SNAP_FILES_EXIST == 'true'
+        id: snapcraft_login
         run: |
           # Write credentials to a file without echoing to logs
           # Using printf instead of echo to avoid potential issues with special characters
           printf "%s" "${{ secrets.SNAPCRAFT_LOGIN_FILE }}" | base64 -d > snapcraft.login
-          # Export credentials to environment variable instead of using --with
-          export SNAPCRAFT_STORE_CREDENTIALS=$(cat snapcraft.login)
-          snapcraft login
+          # Export credentials as an output for later steps
+          echo "SNAPCRAFT_STORE_CREDENTIALS=$(cat snapcraft.login)" >> $GITHUB_ENV
           # Securely remove the credentials file
           rm snapcraft.login
+          # Verify credentials are set (without printing them)
+          if [ -n "$SNAPCRAFT_STORE_CREDENTIALS" ]; then
+            echo "Snapcraft credentials loaded successfully"
+          else
+            echo "Failed to load Snapcraft credentials"
+            exit 1
+          fi
 
       - name: Publish to Snap Store
         if: env.SNAP_FILES_EXIST == 'true'
