@@ -273,3 +273,71 @@ jobs:
           git add README.md
           git commit -m "Update version to ${{ needs.check-version.outputs.x64_version }}"
           git push 
+
+  publish-to-snap-store:
+    needs: [build-and-release]
+    if: needs.check-version.outputs.should_update == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download x64 artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: cursor-ide-snap-linux-x64
+          path: .
+        continue-on-error: true
+
+      - name: Download arm64 artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: cursor-ide-snap-linux-arm64
+          path: .
+        continue-on-error: true
+
+      - name: Check for snap files
+        id: check_snap
+        run: |
+          if ls cursor-ide*.snap 1> /dev/null 2>&1; then
+            echo "SNAP_FILES_EXIST=true" >> $GITHUB_ENV
+            echo "Snap files found:"
+            ls -la cursor-ide*.snap
+          else
+            echo "SNAP_FILES_EXIST=false" >> $GITHUB_ENV
+            echo "No snap files found. Cannot publish to Snap Store."
+            exit 1
+          fi
+
+      - name: Install Snapcraft
+        if: env.SNAP_FILES_EXIST == 'true'
+        run: sudo snap install snapcraft --classic
+
+      - name: Login to Snap Store
+        if: env.SNAP_FILES_EXIST == 'true'
+        id: snapcraft_login
+        run: |
+          # Write credentials to a file without echoing to logs
+          printf "%s" "${{ secrets.SNAPCRAFT_LOGIN_FILE }}" | base64 -d > snapcraft.login
+          # Export credentials as an output for later steps
+          echo "SNAPCRAFT_STORE_CREDENTIALS=$(cat snapcraft.login)" >> $GITHUB_ENV
+          # Securely remove the credentials file
+          rm snapcraft.login
+          # Verify credentials are set (without printing them)
+          if [ -n "$SNAPCRAFT_STORE_CREDENTIALS" ]; then
+            echo "Snapcraft credentials loaded successfully"
+          else
+            echo "Failed to load Snapcraft credentials"
+            exit 1
+          fi
+
+      - name: Publish to Snap Store
+        if: env.SNAP_FILES_EXIST == 'true'
+        run: |
+          for snap_file in cursor-ide*.snap; do
+            if [ -f "$snap_file" ]; then
+              echo "Publishing $snap_file to Snap Store..."
+              snapcraft upload --release=stable "$snap_file"
+              echo "Published $snap_file successfully!"
+            fi
+          done 
