@@ -80,8 +80,13 @@ jobs:
       - name: Login to Snap Store
         if: env.SNAP_FILES_EXIST == 'true'
         run: |
-          echo "${{ secrets.SNAPCRAFT_LOGIN_FILE }}" | base64 -d > snapcraft.login
-          snapcraft login --with snapcraft.login
+          # Write credentials to a file without echoing to logs
+          # Using printf instead of echo to avoid potential issues with special characters
+          printf "%s" "${{ secrets.SNAPCRAFT_LOGIN_FILE }}" | base64 -d > snapcraft.login
+          # Export credentials to environment variable instead of using --with
+          export SNAPCRAFT_STORE_CREDENTIALS=$(cat snapcraft.login)
+          snapcraft login
+          # Securely remove the credentials file
           rm snapcraft.login
 
       - name: Publish to Snap Store

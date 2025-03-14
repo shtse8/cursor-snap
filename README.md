@@ -96,7 +96,7 @@ This repository is configured to automatically publish new versions to the Snap 
 1. The `Auto Update Cursor Snap` workflow checks for new Cursor IDE versions and builds the snap package
 2. The `Publish to Snap Store` workflow then publishes the built snap to the Snap Store
 
-To set up Snap Store publishing:
+To set up Snap Store publishing securely:
 
 1. Install snapcraft on a Linux machine (not in GitHub Actions for security):
    ```bash
@@ -105,15 +105,18 @@ To set up Snap Store publishing:
 
 2. Generate a Snap Store login file:
    ```bash
-   snapcraft export-login --snaps cursor-ide --channels=stable snapcraft.login
+   snapcraft export-login snapcraft.login
    ```
 
-3. Encode the login file to base64:
+3. Encode the login file to base64 (use the -w0 flag to avoid line breaks):
    ```bash
-   cat snapcraft.login | base64 -w 0
+   base64 -w 0 snapcraft.login > snapcraft.login.base64
    ```
 
-4. Copy the encoded output
+4. Copy the encoded output from the file (don't print it to terminal):
+   ```bash
+   cat snapcraft.login.base64
+   ```
 
 5. Add it as a repository secret:
    - Go to your repository settings
@@ -123,7 +126,17 @@ To set up Snap Store publishing:
    - Value: Paste the encoded login file value
    - Click "Add secret"
 
-> **Security Note**: Never generate Snap Store credentials directly in GitHub Actions as the credentials could be exposed in logs.
+6. Securely delete the credential files from your local machine:
+   ```bash
+   shred -u snapcraft.login snapcraft.login.base64
+   ```
+
+> **IMPORTANT SECURITY NOTES**: 
+> - Never generate Snap Store credentials directly in GitHub Actions
+> - Never echo or print credentials in workflow commands
+> - Credentials should never appear in logs
+> - Regularly rotate your Snap Store credentials
+> - If credentials are ever exposed, revoke them immediately and generate new ones
 
 ## Workflow Architecture
 
