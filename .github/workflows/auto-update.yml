@@ -6,49 +6,34 @@ on:
   workflow_dispatch:      # Allow manual trigger
 
 jobs:
-  check-and-build:
+  check-version:
     runs-on: ubuntu-latest
-    # Add permissions for GitHub token
-    permissions:
-      contents: write
-      packages: write
-    strategy:
-      matrix:
-        platform: [linux-x64, linux-arm64]
+    outputs:
+      x64_version: ${{ steps.x64_version.outputs.version }}
+      x64_url: ${{ steps.x64_version.outputs.url }}
+      arm64_version: ${{ steps.arm64_version.outputs.version }}
+      arm64_url: ${{ steps.arm64_version.outputs.url }}
+      should_update: ${{ steps.check_update.outputs.should_update }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install Snapcraft
+      - name: Get latest x64 version
+        id: x64_version
         run: |
-          sudo snap install snapcraft --classic
-
-      - name: Get latest Cursor version and download URL
-        id: cursor-version
-        run: |
-          DOWNLOAD_URL="https://www.cursor.com/api/download?platform=${{ matrix.platform }}&releaseTrack=latest"
+          DOWNLOAD_URL="https://www.cursor.com/api/download?platform=linux-x64&releaseTrack=latest"
           echo "Checking download URL: $DOWNLOAD_URL"
           
           # Get the JSON response from the API
           API_RESPONSE=$(curl -s "$DOWNLOAD_URL")
-          echo "API response:"
-          echo "$API_RESPONSE"
           
           # Extract the downloadUrl from the JSON response
           REDIRECT_URL=$(echo "$API_RESPONSE" | grep -o '"downloadUrl":"[^"]*"' | sed 's/"downloadUrl":"//;s/"//')
-          echo "Download URL from JSON: $REDIRECT_URL"
           
           # Check if REDIRECT_URL is empty
           if [ -z "$REDIRECT_URL" ]; then
-            echo "Error: Could not extract download URL from JSON. Using fallback URL."
-            # Use a fallback URL based on the platform
-            if [ "${{ matrix.platform }}" == "linux-x64" ]; then
-              REDIRECT_URL="https://downloads.cursor.com/production/client/linux/x64/appimage/Cursor-0.47.4-8f8a2000673d2c48f6cac5eea2f3f9f2ed5e4ec2.deb.glibc2.28-x86_64.AppImage"
-              VERSION="0.47.4"
-            else
-              REDIRECT_URL="https://downloads.cursor.com/production/client/linux/arm64/appimage/Cursor-0.47.4-8f8a2000673d2c48f6cac5eea2f3f9f2ed5e4ec2.deb.glibc2.28-aarch64.AppImage"
-              VERSION="0.47.4"
-            fi
+            REDIRECT_URL="https://downloads.cursor.com/production/client/linux/x64/appimage/Cursor-0.47.4-8f8a2000673d2c48f6cac5eea2f3f9f2ed5e4ec2.deb.glibc2.28-x86_64.AppImage"
+            VERSION="0.47.4"
           else
             # Try to extract version from URL with different patterns
             VERSION=$(echo "$REDIRECT_URL" | grep -oP 'Cursor-\K[^-]+(?=-)' || echo "")
@@ -59,18 +44,90 @@ jobs:
             fi
           fi
           
-          echo "Extracted version: $VERSION"
-          echo "CURSOR_VERSION=$VERSION" >> $GITHUB_ENV
-          echo "DOWNLOAD_URL=$REDIRECT_URL" >> $GITHUB_ENV
-          echo "Version: $VERSION"
-          echo "Download URL: $REDIRECT_URL"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "url=$REDIRECT_URL" >> $GITHUB_OUTPUT
+          echo "X64 Version: $VERSION"
+          echo "X64 URL: $REDIRECT_URL"
 
-      - name: Update snapcraft.yaml
+      - name: Get latest arm64 version
+        id: arm64_version
         run: |
-          # Update version
-          sed -i "s/version: '.*'/version: '${{ env.CURSOR_VERSION }}'/g" snap/snapcraft.yaml
+          DOWNLOAD_URL="https://www.cursor.com/api/download?platform=linux-arm64&releaseTrack=latest"
+          echo "Checking download URL: $DOWNLOAD_URL"
           
-          # Update the override-build section to use the downloaded AppImage
+          # Get the JSON response from the API
+          API_RESPONSE=$(curl -s "$DOWNLOAD_URL")
+          
+          # Extract the downloadUrl from the JSON response
+          REDIRECT_URL=$(echo "$API_RESPONSE" | grep -o '"downloadUrl":"[^"]*"' | sed 's/"downloadUrl":"//;s/"//')
+          
+          # Check if REDIRECT_URL is empty
+          if [ -z "$REDIRECT_URL" ]; then
+            REDIRECT_URL="https://downloads.cursor.com/production/client/linux/arm64/appimage/Cursor-0.47.4-8f8a2000673d2c48f6cac5eea2f3f9f2ed5e4ec2.deb.glibc2.28-aarch64.AppImage"
+            VERSION="0.47.4"
+          else
+            # Try to extract version from URL with different patterns
+            VERSION=$(echo "$REDIRECT_URL" | grep -oP 'Cursor-\K[^-]+(?=-)' || echo "")
+            
+            # If the first pattern fails, try an alternative pattern
+            if [ -z "$VERSION" ]; then
+              VERSION=$(echo "$REDIRECT_URL" | grep -oP 'Cursor-\K[\d\.]+' || echo "0.47.4")
+            fi
+          fi
+          
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "url=$REDIRECT_URL" >> $GITHUB_OUTPUT
+          echo "ARM64 Version: $VERSION"
+          echo "ARM64 URL: $REDIRECT_URL"
+
+      - name: Check if update is needed
+        id: check_update
+        run: |
+          # Get current version from README
+          CURRENT_VERSION=$(grep -oP 'Latest version: \K.*' README.md || echo "0.0.0")
+          echo "Current version: $CURRENT_VERSION"
+          echo "New version: ${{ steps.x64_version.outputs.version }}"
+          
+          # Compare versions
+          if [ "$CURRENT_VERSION" != "${{ steps.x64_version.outputs.version }}" ]; then
+            echo "should_update=true" >> $GITHUB_OUTPUT
+            echo "Update needed: Current=$CURRENT_VERSION, New=${{ steps.x64_version.outputs.version }}"
+          else
+            echo "should_update=false" >> $GITHUB_OUTPUT
+            echo "No update needed: Current version is already $CURRENT_VERSION"
+          fi
+
+  build-and-release:
+    needs: check-version
+    if: needs.check-version.outputs.should_update == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+    strategy:
+      matrix:
+        platform: [linux-x64, linux-arm64]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set environment variables
+        run: |
+          if [ "${{ matrix.platform }}" == "linux-x64" ]; then
+            echo "CURSOR_VERSION=${{ needs.check-version.outputs.x64_version }}" >> $GITHUB_ENV
+            echo "DOWNLOAD_URL=${{ needs.check-version.outputs.x64_url }}" >> $GITHUB_ENV
+          else
+            echo "CURSOR_VERSION=${{ needs.check-version.outputs.arm64_version }}" >> $GITHUB_ENV
+            echo "DOWNLOAD_URL=${{ needs.check-version.outputs.arm64_url }}" >> $GITHUB_ENV
+          fi
+
+      - name: Install Snapcraft
+        run: |
+          sudo snap install snapcraft --classic
+
+      - name: Create snapcraft.yaml
+        run: |
+          # Create snapcraft.yaml with the correct version and URL
           cat > snap/snapcraft.yaml << EOF
           name: cursor-ide
           base: core22
@@ -114,12 +171,12 @@ jobs:
           EOF
           
           # Show the updated snapcraft.yaml for debugging
-          echo "Updated snapcraft.yaml:"
+          echo "Created snapcraft.yaml:"
           cat snap/snapcraft.yaml
 
-      - name: Build Snap (Direct Method)
+      - name: Build Snap
         run: |
-          # Try building directly without virtualization
+          # Build the snap package
           sudo SNAPCRAFT_BUILD_ENVIRONMENT=host snapcraft
           
           # Rename the snap file to include the platform
@@ -134,7 +191,7 @@ jobs:
           path: cursor-ide*.snap
           retention-days: 1
 
-      - name: Create GitHub Release (Simple Method)
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -145,21 +202,26 @@ jobs:
           fail_on_unmatched_files: false
           prerelease: false
 
+  update-readme:
+    needs: [check-version, build-and-release]
+    if: needs.check-version.outputs.should_update == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Update README version
-        if: matrix.platform == 'linux-x64'
         run: |
           # Update README with latest version
-          sed -i "s/Latest version: .*/Latest version: ${{ env.CURSOR_VERSION }}/g" README.md
+          sed -i "s/Latest version: .*/Latest version: ${{ needs.check-version.outputs.x64_version }}/g" README.md
           
           # Configure git
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           
-          # Add both README and snapcraft.yaml to the commit
-          git add README.md snap/snapcraft.yaml
-          
-          # Commit the changes
-          git commit -m "Update version to ${{ env.CURSOR_VERSION }} and update snapcraft.yaml" || echo "No changes to commit"
-          
-          # Push the changes
-          git push || (git pull --rebase && git push) 
+          # Commit and push the changes
+          git add README.md
+          git commit -m "Update version to ${{ needs.check-version.outputs.x64_version }}"
+          git push 
