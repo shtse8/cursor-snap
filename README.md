@@ -4,7 +4,7 @@ This repository contains the necessary configuration to build a Snap package for
 
 ![Auto Update Cursor Snap](https://github.com/shtse8/cursor-snap/workflows/Auto%20Update%20Cursor%20Snap/badge.svg)
 
-Latest version: 0.47.9
+Latest version: 0.48.0
 
 ## Automatic Updates
 
