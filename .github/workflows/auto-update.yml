@@ -213,7 +213,7 @@ jobs:
               override-build: |
                 craftctl default
                 mkdir -p \$SNAPCRAFT_PART_INSTALL/bin/
-                cp \$SNAPCRAFT_PART_INSTALL/Cursor*.AppImage \$SNAPCRAFT_PART_INSTALL/bin/cursor
+                cp \$SNAPCRAFT_PART_INSTALL/* \$SNAPCRAFT_PART_INSTALL/bin/cursor
                 chmod +x \$SNAPCRAFT_PART_INSTALL/bin/cursor
                 cd \$SNAPCRAFT_PART_INSTALL
                 \$SNAPCRAFT_PART_INSTALL/bin/cursor --appimage-extract
