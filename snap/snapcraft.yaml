@@ -29,10 +29,16 @@ apps:
 parts:
   cursor-ide:
     plugin: dump
-    source: https://github.com/getcursor/cursor/releases/latest/download/Cursor.AppImage
+    source: https://downloads.cursor.com/production/b6fb41b5f36bda05cab7109606e7404a65d1ff32/linux/x64/Cursor-0.47.9-x86_64.AppImage
     source-type: file
     override-build: |
       craftctl default
       mkdir -p $SNAPCRAFT_PART_INSTALL/bin/
-      cp $SNAPCRAFT_PART_INSTALL/Cursor.AppImage $SNAPCRAFT_PART_INSTALL/bin/cursor
+      cp $SNAPCRAFT_PART_INSTALL/Cursor*.AppImage $SNAPCRAFT_PART_INSTALL/bin/cursor
       chmod +x $SNAPCRAFT_PART_INSTALL/bin/cursor 
+      cd $SNAPCRAFT_PART_INSTALL
+      $SNAPCRAFT_PART_INSTALL/bin/cursor --appimage-extract
+      rm $SNAPCRAFT_PART_INSTALL/bin/cursor
+      mv $SNAPCRAFT_PART_INSTALL/squashfs-root/* $SNAPCRAFT_PART_INSTALL/bin/
+      cd $SNAPCRAFT_PART_INSTALL/bin/
+      cp AppRun cursor
